@@ -74,7 +74,6 @@ source("scripts/function_get_goals.R")
 This is where the heavy lifting actually occurs. It's one API call for each custom dimension, each custom metric, and each goal in each view (!). Technically, multiple custom metrics and goals could be pulled at once -- up to 10 at a time -- but that would require adding logic to chunk things up to do that, which seemed like it would be adding additional logic and code that, well, isn't really worth it. There's no way of getting around "one API call per custom dimension," though, and that's where we tend to see the bulk of the work (time) as it is.
 
 The three functions below pull hits for custom dimensions, totals for custom metrics, and total conversions for goals.
-
 ```{r}
 source("scripts/functions_get_data.R")
 ```
@@ -373,7 +372,7 @@ saveWorkbook(excel_file)
 
 Record the end time and calculate the duration.
 
-```{r process_time, echo=FALSE}
+```{r process_time}
 process_end <- Sys.time()
 cat("The process took", process_end - process_start,"to run.")
 ```

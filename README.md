@@ -90,7 +90,7 @@ custom_dim_top_x <- 5
 
 ### Run the Script!
 
-Run the script. Depending on how many views and how many custom dimensions, custom metrics, and goals are set up, it may take a while to run. But, ultimately, it will export a file called `custom_data_summary.xlsx` to the `output` directory.
+Open and run `ga-views-dims-metrics-goals.Rmd'. Depending on how many views and how many custom dimensions, custom metrics, and goals are set up, it may take a while to run. But, ultimately, it will export a file called `custom_data_summary.xlsx` to the `output` directory.
 
 ## Notes on the Output File
 
