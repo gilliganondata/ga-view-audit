@@ -1,0 +1,380 @@
+---
+title: "Custom Dimensions, Custom Metrics, and Goals"
+output: html_notebook
+---
+
+## Initial Setup
+
+This is just the basic library loads, GA auth, date setting, and so on. But, it also imports the list of views to work with and does some processing there. Ultimately, we wind up with a `final_views_list` data frame that lists all of the views of interest.
+
+```{r, message=FALSE}
+# Log the start time for the whole process. IF we do a full run at some point, we'll use this to see
+# how long it took.
+process_start <- Sys.time()
+
+# Get Google Analytics credentials and set them. If you have set your GA client ID and client secret in
+# your .Renviron file, then you can simply leave the code below as is. If you would prefer to hard-code
+# them, then kill the two lines below and uncomment / complete the following lines.
+ga_client_id <- Sys.getenv("GA_CLIENT_ID")
+ga_client_secret <- Sys.getenv("GA_CLIENT_SECRET")
+
+# ga_client_id <- "INSERT YOUR CLIENT ID"
+# ga_client_secret <- "INSERT YOUR CLIENT SECRET"
+
+# Adjust as warranted. The default below is toe pull data for the last 30 days, but this can be 
+# increased. The script does not make any attempt to reduce sampling, as the numbers are really
+# just for a general sense of scale. 
+end_date <- Sys.Date() - 1
+start_date <- end_date - 29
+date_range <- c(start_date, end_date)
+
+# Top X setting for custom dimensions: specify how many unique values for each custom dimension
+# should be returned.
+custom_dim_top_x <- 5
+
+# Load all the other setup stuff
+source("scripts/setup.R")
+```
+
+There is an _Inception_-type move here. Ultimately, we have to:
+
+1. Take each view ID
+2. Use that view ID to look up the property ID
+3. For that property ID, pull a list of custom dimensions (and custom metrics)
+4. Go back to the view ID and pull data for each custom dimension, custom metric, and goal
+5. Combine all of that data into one big, flat, list
+6. Push that list, as well as breakouts by view, to Excel
+
+## Prep Functions
+
+There are a bunch of functions just to figure out _what_ data needs to be pulled.
+
+Function to get the custom dimensions and metrics for a specified _property_. The name of the function is `get_custom_variables()`. This function gets used to build a list called `custom_vars_all` where each element is a property ID and contains two items: `$custom_dims` and `$custom_metrics`.
+
+```{r function_get_custom_vars}
+source("scripts/function_get_custom_vars.R")
+```
+
+To get the custom dimensions and custom metrics for a given _view_ is, really, just a matter of looking up the view's property ID and then pulling the custom dimensions and custom metrics for that property. Ultimately, that's what we'll need -- we'll need to pull the data at the view-level (a custom dimension may exist in a property that has 10 views, but only 2 of those views wind up having any data for it).
+
+One function -- `get_custom_dims_list` -- pulls all the custom dimensions. Another function -- `get_custom_metrics_list` -- pulls all the custom metrics.
+
+```{r}
+source("scripts/functions_get_custom_dims_and_metrics.R")
+```
+
+Function to pull all of the goals in a given view. The name of the function is `get_goals`.
+
+```{r get_goal_list}
+source("scripts/function_get_goals.R")
+```
+
+## Functions for Pulling the Actual Data
+
+This is where the heavy lifting actually occurs. It's one API call for each custom dimension, each custom metric, and each goal in each view (!). Technically, multiple custom metrics and goals could be pulled at once -- up to 10 at a time -- but that would require adding logic to chunk things up to do that, which seemed like it would be adding additional logic and code that, well, isn't really worth it. There's no way of getting around "one API call per custom dimension," though, and that's where we tend to see the bulk of the work (time) as it is.
+
+The three functions below pull hits for custom dimensions, totals for custom metrics, and total conversions for goals.
+
+```{r}
+source("scripts/functions_get_data.R")
+```
+
+## Do the Actual Processing of the Data!
+
+Get the custom dimensions and metrics for each property ID.
+
+```{r processing, message=FALSE}
+
+# Get the custom dimensions and metrics for each property ID. This returns a list
+# where each element is a property ID and has two sub-lists: one of custom dims &
+# one of custom metrics for the property.
+custom_vars_all <- mapply(get_custom_variables,
+                          account_id = final_property_list$accountId,
+                          property_id = final_property_list$webPropertyId, 
+                          SIMPLIFY = FALSE)
+
+# Add the property IDs back in as the element names.
+names(custom_vars_all) <- final_property_list$webPropertyId
+
+```
+
+Crank through all of the views and get the custom dimensions data (mainly a summary of the top X values by hits for each one). There's just no way around this: it's one call to GA for each custom dimension in each view. It can take a while!
+
+```{r custom_dims_data, message=FALSE}
+
+# For each view, we have to look to the view's property to get the list of custom dimensions
+# available for it -- they're created/managed at the property level, but we want to look at
+# their *values* at the view level.
+custom_dims_list <- lapply(final_view_list$view_id, get_custom_dims_list) 
+names(custom_dims_list) <- final_view_list$view_id
+
+# This is a little tricky, but, basically, we want to get one big data frame where each
+# row is a view ID and dimension ID. Some properties have NO custom dimensions, but we 
+# still want to have a row in the result to show that each view has been assessed.
+
+# Start with a quick function that has conditional logic in it to either return an empty
+# data frame or a data frame with a row for each custom dimension.
+get_views_and_dims <- function(view_id){
+  if(is.null(custom_dims_list[[view_id]])){
+    data.frame(view_id = view_id, dimensions = "(No Custom Dimensions)")
+  } else {
+    data.frame(view_id = view_id, dimensions = custom_dims_list[[view_id]]$id)
+  }
+}
+
+# Process the list of view IDs with the function above. It returns a list of data frames,
+# which we want to reduce to a single data frame, and then convert the columns to be 
+# characters rather than factors.
+list_to_process <- lapply(names(custom_dims_list), get_views_and_dims) %>% 
+  Reduce(rbind,.) %>%
+  mutate(view_id = as.character(view_id), dimensions = as.character(dimensions))
+
+# Split off the views that have no custom dimensions. We'll tack these back on later.
+views_with_no_custom_dims <- filter(list_to_process, dimensions == "(No Custom Dimensions)")
+list_to_process <- filter(list_to_process, dimensions != "(No Custom Dimensions)")
+
+# This takes a while. but, we have to get each dimension's hits one at a time -- just the nature
+# of the data; using mapply because we have to pass the function both the view ID and the dimension
+# ID. Then, we take that list and reduce it back to a simple data frame: view ID, custom dimension ID,
+# and the top values for the custom dimension. And, ultimately, convert it to a data frame.
+custom_dim_hits_summary <- mapply(get_custom_dim_hits, 
+                                  view_id = list_to_process$view_id, 
+                                  dimension_id = list_to_process$dimensions,
+                                  SIMPLIFY = FALSE) %>%
+  Reduce(rbind,.) %>% 
+  as.data.frame()
+
+# The columns are all factors, so convert them to character.
+custom_dim_hits_summary <- custom_dim_hits_summary %>% 
+  mutate(view_id = as.character(view_id),
+         dimension_id = as.character(dimension_id),
+         top_values = as.character(top_values))
+
+# Add the property ID and view name back in
+custom_dim_hits_summary <- select(final_view_list, webPropertyId, view_id, viewName) %>%
+  right_join(custom_dim_hits_summary)
+
+# And, get the meta data about each custom dimensions -- scope, created, updated, etc.
+custom_dim_hits_summary <- custom_dim_hits_summary %>% 
+  left_join(master_custom_dims, 
+            by = c(webPropertyId = "webPropertyId", dimension_id = "id"))
+
+# Add in rows for the "no custom dimensions" scenarios
+views_with_no_custom_dims <- views_with_no_custom_dims %>% 
+  left_join(final_view_list) %>%
+  select(webPropertyId, view_id , accountId, viewName) %>%
+  mutate(dimension_id = "(No Custom Dimensions)",
+         top_values = NA,
+         name = NA,
+         index = NA,
+         scope = NA,
+         active = NA,
+         created = NA,
+         updated = NA)
+
+# Combine the data frame of custom dimensions that have data with the ones that have
+# no data.
+custom_dim_hits_summary <- rbind(custom_dim_hits_summary, views_with_no_custom_dims)
+
+# Add/adjust the columns a bit for later merging with custom metrics
+custom_dim_hits_summary$type <- NA
+custom_dim_hits_summary$data_type <- "Custom Dimension"
+names(custom_dim_hits_summary)[names(custom_dim_hits_summary) == 'dimension_id'] <- 'id'
+names(custom_dim_hits_summary)[names(custom_dim_hits_summary) == 'top_values'] <- 'data_snapshot'
+```
+
+Do the same basic exercise, but, this time, for custom metrics.
+
+```{r custom_metrics_data, message=FALSE}
+
+# For each view, we have to look to the view's property to get the list of custom dimensions
+# available for it -- they're created/managed at the property level, but we want to look at
+# their *values* at the view level.
+custom_metrics_list <- lapply(final_view_list$view_id, get_custom_metrics_list) 
+names(custom_metrics_list) <- final_view_list$view_id
+
+# This is a little tricky, but, basically, we want to get one big data frame where each
+# row is a view ID and dimension ID. Some properties have NO custom dimensions, but we 
+# still want to have a row in the result to show that each view has been assessed.
+
+# Start with a quick function that has conditional logic in it to either return an empty
+# data frame or a data frame with a row for each custom metric
+get_views_and_metrics <- function(view_id){
+  if(is.null(custom_metrics_list[[view_id]])){
+    data.frame(view_id = view_id, metrics = "(No Custom Metrics)")
+    } else {
+      data.frame(view_id = view_id, metrics = custom_metrics_list[[view_id]]$id)
+      }
+}
+
+# Process the list of view IDs with the function above. It returns a list of data frames,
+# which we want to reduce to a single data frame, and then convert the columns to be 
+# characters rather than factors.
+list_to_process <- lapply(names(custom_metrics_list), get_views_and_metrics) %>% 
+  Reduce(rbind,.) %>%
+  mutate(view_id = as.character(view_id), metrics = as.character(metrics))
+
+# Split off the views that have no custom metrics
+views_with_no_custom_metrics <- filter(list_to_process, metrics == "(No Custom Metrics)")
+list_to_process <- filter(list_to_process, metrics != "(No Custom Metrics)")
+
+# This takes a while. It's mirroring the way the custom dimensions are pulled -- one dimension at
+# a time. We could do up to 10 metrics at a time, but then there would need to be logic to break
+# the list up, pull the data, and stitch it back together. So, we're sacrificing speed for simplicity.
+# We using mapply because we have to pass the function both the view ID and the metric ID.
+# Then, we take that list and reduce it back to a simple data frame: view ID, custom metric ID,
+# and the total for the custom metric. And, ultimately, we convert it to a data frame.
+custom_metric_hits_summary <- mapply(get_custom_metric_hits, 
+                                  view_id = list_to_process$view_id, 
+                                  metric_id = list_to_process$metrics,
+                                  SIMPLIFY = FALSE) %>%
+  Reduce(rbind,.) %>% 
+  as.data.frame()
+
+# The columns are all factors, so convert them to characters/numerics.
+custom_metric_hits_summary <- custom_metric_hits_summary %>% 
+  mutate(view_id = as.character(view_id),
+         metric_id = as.character(metric_id),
+         total_hits = as.numeric(total_hits))
+
+# Add the property ID and view name back in
+custom_metric_hits_summary <- select(final_view_list, webPropertyId, view_id, viewName) %>%
+  right_join(custom_metric_hits_summary)
+
+# And, get the meta data about each custom metrics
+custom_metric_hits_summary <- custom_metric_hits_summary %>% 
+  left_join(master_custom_metrics, by = c(webPropertyId = "webPropertyId", metric_id = "id"))
+
+# Add in rows for the "no custom metrics" scenarios
+views_with_no_custom_metrics <- views_with_no_custom_metrics %>% 
+  left_join(final_view_list) %>% 
+  select(webPropertyId, viewName, view_id, accountId) %>%
+  mutate(metric_id = "(No Custom Metrics)",
+         total_hits = NA,
+         name = NA,
+         index = NA,
+         scope = NA,
+         active = NA,
+         created = NA,
+         type = NA,
+         updated = NA)
+
+custom_metric_hits_summary <- rbind(custom_metric_hits_summary, views_with_no_custom_metrics)
+
+# Add one column to enable combining with custom dimensions data, and do a little adjusting
+# on a couple more.
+custom_metric_hits_summary$data_type <- "Custom Metric"
+names(custom_metric_hits_summary)[names(custom_metric_hits_summary) == 'metric_id'] <- 'id'
+names(custom_metric_hits_summary)[names(custom_metric_hits_summary) == 'total_hits'] <- 'data_snapshot'
+```
+
+Finally, get all of the _goals_ data for each view. 
+
+```{r get_goals_data, message=FALSE}
+
+# Get all of the active goals
+goals_by_view <- mapply(get_goals, final_view_list$accountId,
+                        final_view_list$webPropertyId,
+                        final_view_list$view_id,
+                        SIMPLIFY = FALSE) %>% 
+  Reduce(rbind,.) %>% 
+  as.data.frame()
+
+# Process a data frame with a list of goals. This calls the function above to do this
+goal_conversions <- mapply(get_goal_conversions, view_id = goals_by_view$view_id,
+                             goal_id = goals_by_view$goal_id,
+                           SIMPLIFY = FALSE) %>%
+    Reduce(rbind,.) %>% 
+    as.data.frame()
+
+# Mash the above together.
+goals_summary <- cbind(goals_by_view, goal_conversions)
+
+# Change the column names to prep to combine with other data
+names(goals_summary) <- c("view_id", "index", "name", "active", "created", "updated", "data_snapshot")
+
+# Bring in "key view" flag and various other fields to enable combining with custom dimensions
+# and custom metrics data.
+goals_summary <- goals_summary %>% 
+  left_join(final_view_list) %>% 
+  mutate(data_type = "Goal",
+         id = paste0("Goal ", index),
+         type = NA,
+         scope = NA) %>% 
+  select(viewName, view_id, webPropertyId, data_type, name, id, index, data_snapshot, type, scope, active,
+         created, updated)
+
+```
+
+## Combine the Data
+
+Get the custom dimensions, custom metrics, and goals all into a single data frame.
+
+```{r combined_data, message=FALSE}
+
+# Combine and sort the custom dimensions and custom metrics data
+combined_data <- rbind(custom_dim_hits_summary, custom_metric_hits_summary) %>% 
+  left_join(select(final_view_list, view_id)) %>%
+  select(viewName, view_id, webPropertyId, data_type, name, id, index, data_snapshot, type, scope, active, created, updated) %>% 
+  rbind(goals_summary) %>% 
+  mutate(active = ifelse(is.na(active), FALSE, active)) %>% 
+  arrange(viewName, data_type, index)
+
+```
+
+Generate an Excel file that is organized by view and with a master list that is organized by variable.
+
+```{r excel_by_view}
+
+# Generate a list of worksheets for Excel. We have to truncate the names so
+# that they are no longer than 30 characters. 
+worksheets_list <- group_by(combined_data, viewName) %>% 
+  summarise() %>% 
+  mutate(sheet_name = str_replace(viewName, "[^[:alnum:]]", " ")) %>%      # Replace special characters with spaces
+  mutate(sheet_name = ifelse(nchar(sheet_name) > 30, 
+                             paste0(substr(sheet_name, 1, 27),"..."), sheet_name)) %>%
+  arrange(sheet_name) 
+
+# We can't have duplicate sheet names, so this is some contorting to address that
+worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)] <- 
+  paste0(substr(worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)],1,24),"...(2)")
+
+worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)] <- 
+  paste0(substr(worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)],1,24),"...(3)")
+
+# As a guide, include a sheet that lists all of the views included
+views_included <- final_view_list %>% 
+  select(webPropertyId, webPropertyName, view_id, viewName)
+
+# Load/create a workbook. This one is organized by view
+excel_file <- loadWorkbook ("output/custom_data_summary.xlsx", create = TRUE)
+
+# Put the list of views in a worksheet
+createSheet(excel_file, "List of Views")
+writeWorksheet(excel_file, views_included, "List of Views")
+
+# Make one flat list of all values sorted by custom variable / goal
+combined_by_custom_var <- combined_data %>% arrange(data_type, index)
+createSheet(excel_file,  "Master List of Values")
+writeWorksheet(excel_file, combined_by_custom_var, "Master List of Values")
+
+# And... finally using a loop. This may not be the most elegant way to do this, but it seems safest.
+# It just loops through the worksheets list and makes a new tab for each one
+for(i in 1:nrow(worksheets_list)){
+
+  export_data <- filter(combined_data, viewName == worksheets_list$viewName[[i]])
+ createSheet(excel_file,  worksheets_list$sheet_name[[i]])
+  writeWorksheet(excel_file, export_data, worksheets_list$sheet_name[[i]])
+}
+
+saveWorkbook(excel_file)
+
+```
+
+Record the end time and calculate the duration.
+
+```{r process_time, echo=FALSE}
+process_end <- Sys.time()
+cat("The process took", process_end - process_start,"to run.")
+```
+
