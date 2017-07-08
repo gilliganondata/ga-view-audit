@@ -1,11 +1,15 @@
 ---
 title: "Custom Dimensions, Custom Metrics, and Goals"
-output: html_notebook
+output:
+  html_document: default
+  html_notebook: default
 ---
 
 ## Initial Setup
 
 This is just the basic library loads, GA auth, date setting, and so on. But, it also imports the list of views to work with and does some processing there. Ultimately, we wind up with a `final_views_list` data frame that lists all of the views of interest.
+
+Windows users may experience an error message `Error: package 'rJava' could not be loaded` following installation of the `xlsx` package. `xlsx` relies on Java and the error message may be due to the 32-bit version of Java being installed on a 64-bit machine. To fix this issue, follow the instructions in [this StackOverflow post](https://stackoverflow.com/questions/28367964/problems-requiring-rjava-in-windows) and install the correction version.
 
 ```{r, message=FALSE}
 # Log the start time for the whole process. IF we do a full run at some point, we'll use this to see
@@ -340,6 +344,9 @@ worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)] <-
 
 worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)] <- 
   paste0(substr(worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)],1,24),"...(3)")
+
+# Create output folder if required
+if (!file.exists("output")) dir.create("output")
 
 # Set the path and name for the Excel file to be created
 output_file <- "output/custom_data_summary.xlsx"
