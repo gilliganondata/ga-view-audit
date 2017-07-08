@@ -154,18 +154,6 @@ $(document).ready(function () {
 <pre><code>ga_client_id &lt;- Sys.getenv(&quot;GA_CLIENT_ID&quot;)
 ga_client_secret &lt;- Sys.getenv(&quot;GA_CLIENT_SECRET&quot;)</code></pre>
 </div>
-<div id="packages-used" class="section level3">
-<h3>Packages Used</h3>
-<p>I should probably have that fancy sort of script that checks for and installs the needed packages if they’re not present…but I don’t. The list of packages is at the top of the <code>scripts/setup.R</code> file… and listed right here:</p>
-<ul>
-<li><code>tidyverse</code></li>
-<li><code>stringr</code></li>
-<li><code>googleAnalyticsR</code></li>
-<li><code>knitr</code></li>
-<li><code>XLConnect</code></li>
-</ul>
-<p>I’m not super-thrilled with <code>XLConnect</code> here, as it’s a pain to add some cleanup and formatting (and I didn’t!). But, <code>WriteXLS</code> doesn’t work because there are newline characters in the output, and <code>WriteXLS</code> doesn’t play nicely there.</p>
-</div>
 <div id="create-a-key_views.csv-file" class="section level3">
 <h3>Create a key_views.csv File</h3>
 <p>This is the list of views that you want to assess. You can get these from the <a href="https://ga-dev-tools.appspot.com/query-explorer/">Google Analytics Query Explorer</a> or through any other means. But, ultimately, they need to go into a file called <code>key_views.csv</code> <strong>located in the <code>input</code> folder</strong>. (There is a file there now that you can use as a template.)</p>
@@ -202,21 +190,16 @@ start_date &lt;- end_date - 29</code></pre>
 <div id="set-how-many-custom-dimension-values-to-return" class="section level3">
 <h3>Set How Many Custom Dimension Values to Return</h3>
 <p>The script, by default, returns the top 5 custom dimension values by hits. This can be set to any number (if there are fewer than that number for any specific dimension, it will simply return all of the values). Just update this line of the code:</p>
-<p>`<code>custom_dim_top_x &lt;- 5</code></p>
+<pre><code>custom_dim_top_x &lt;- 5</code></pre>
 </div>
 <div id="run-the-script" class="section level3">
 <h3>Run the Script!</h3>
-<p>Run the script. Depending on how many views and how many custom dimensions, custom metrics, and goals are set up, it may take a while to run. But, ultimately, it will export a file called <code>custom_data_summary.xlsx</code> to the <code>output</code> directory.</p>
+<p>Open and run <code>ga-views-dims-metrics-goals.Rmd'. Depending on how many views and how many custom dimensions, custom metrics, and goals are set up, it may take a while to run. But, ultimately, it will export a file called</code>custom_data_summary.xlsx<code>to the</code>output` directory.</p>
 </div>
 </div>
-<div id="notes-on-the-output-file" class="section level2">
-<h2>Notes on the Output File</h2>
-<p>As noted earlier, the script uses <code>XLConnect</code>, and the result is structured well enough, but not particularly well formatted. So, a little bit of manual cleanup in Excel is generally in order. Specifically:</p>
-<ul>
-<li>The <strong>data_snapshot</strong> column that is on most of the worksheets needs to be set to wrap text.</li>
-<li>Column widths need to be adjusted.</li>
-</ul>
-<p>The <strong>data_snapshot</strong> column is probably the most important piece of output, but it’s three different things:</p>
+<div id="a-note-on-the-output-file" class="section level2">
+<h2>A Note on the Output File</h2>
+<p>The <strong>data_snapshot</strong> column that appears on every sheet except the first one is probably the most important piece of output. It’s three different things depending on the type of data:</p>
 <ul>
 <li>For <strong>custom dimensions</strong>, it’s the top X (default = 5) values for the custom dimension based on hits, as well as, parenthethically, the actual number of hits</li>
 <li>For <strong>custom metrics</strong>, it’s the total for the metric</li>

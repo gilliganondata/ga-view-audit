@@ -40,18 +40,6 @@ ga_client_id <- Sys.getenv("GA_CLIENT_ID")
 ga_client_secret <- Sys.getenv("GA_CLIENT_SECRET")
 ```
 
-### Packages Used
-
-I should probably have that fancy sort of script that checks for and installs the needed packages if they're not present...but I don't. The list of packages is at the top of the `scripts/setup.R` file... and listed right here:
-
-* `tidyverse`
-* `stringr`
-* `googleAnalyticsR`
-* `knitr`
-* `XLConnect`
-
-I'm not super-thrilled with `XLConnect` here, as it's a pain to add some cleanup and formatting (and I didn't!). But, `WriteXLS` doesn't work because there are newline characters in the output, and `WriteXLS` doesn't play nicely there.
-
 ### Create a key_views.csv File
 
 This is the list of views that you want to assess. You can get these from the [Google Analytics Query Explorer](https://ga-dev-tools.appspot.com/query-explorer/) or through any other means. But, ultimately, they need to go into a file called `key_views.csv` **located in the `input` folder**. (There is a file there now that you can use as a template.)
@@ -92,14 +80,9 @@ custom_dim_top_x <- 5
 
 Open and run `ga-views-dims-metrics-goals.Rmd'. Depending on how many views and how many custom dimensions, custom metrics, and goals are set up, it may take a while to run. But, ultimately, it will export a file called `custom_data_summary.xlsx` to the `output` directory.
 
-## Notes on the Output File
+## A Note on the Output File
 
-As noted earlier, the script uses `XLConnect`, and the result is structured well enough, but not particularly well formatted. So, a little bit of manual cleanup in Excel is generally in order. Specifically:
-
-* The **data_snapshot** column that is on most of the worksheets needs to be set to wrap text.
-* Column widths need to be adjusted.
-
-The **data_snapshot** column is probably the most important piece of output, but it's three different things:
+The **data_snapshot** column that appears on every sheet except the first one is probably the most important piece of output. It's three different things depending on the type of data:
 
 * For **custom dimensions**, it's the top X (default = 5) values for the custom dimension based on hits, as well as, parenthethically, the actual number of hits
 * For **custom metrics**, it's the total for the metric
