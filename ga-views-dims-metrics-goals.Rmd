@@ -341,32 +341,103 @@ worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)] <-
 worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)] <- 
   paste0(substr(worksheets_list$sheet_name[duplicated(worksheets_list$sheet_name)],1,24),"...(3)")
 
-# As a guide, include a sheet that lists all of the views included
+# Set the path and name for the Excel file to be created
+output_file <- "output/custom_data_summary.xlsx"
+
+# Check if the file already exists. If it does, delete it. Otherwise, later operations will
+# throw an error
+if (file.exists(output_file)) file.remove(output_file)
+
+# Create/load the workbook
+output_wb <- createWorkbook(type="xlsx")
+
+# We want to have the Excel file decently formatted. So, we've got to jump through a few hoops to 
+# define cell styles and such. We could just use write.xlsx (also part of the xlsx package),
+# but that doesn't set up our styling as nicely as we'd like.
+
+# Set up the style for the column headings
+style_headings <- CellStyle(output_wb) +
+  Font(output_wb, heightInPoints = 10, name = "Arial", isBold = TRUE) +
+  Alignment(vertical = "VERTICAL_TOP", wrapText = TRUE)
+  
+# Set up the style for the bulk of the cells
+style_main_cells <- CellStyle(output_wb) +
+  Font(output_wb, heightInPoints = 10, name = "Arial", isBold = FALSE) +
+  Alignment(vertical = "VERTICAL_TOP", wrapText = TRUE)
+
+# Set up the style for the date (updated/created) columns
+style_date_cells <- style_main_cells +
+  DataFormat("dd-mmm-yyyy")
+
+# Function to write values to a workbook. This is where the magic happens!
+write_to_workbook <- function(data_frame, sheet_name){
+  
+  # Make a list that is as long as the number of columns with the column style
+  # for each one
+  col_styles <- lapply(seq(1:ncol(data_frame)), function(x) style_main_cells)
+  names(col_styles) <- seq(1:ncol(data_frame))
+  
+  # If there is a "created" or "updated" column, change their format
+  # to be the date format. Yeah... This canNOT be the most elegant way to
+  # do this!
+  if(length(grep("^created$", names(data_frame))) != 0){
+    col_styles[[grep("^created$", names(data_frame))]] <- style_date_cells
+  }
+  
+  if(length(grep("^updated$", names(data_frame))) != 0){
+    col_styles[[grep("^updated$", names(data_frame))]] <- style_date_cells
+  }
+  
+  # Create the sheet
+  new_sheet <- createSheet(output_wb, sheetName=sheet_name)
+  
+  # Add the data (with a bit o' formatting)
+  addDataFrame(data_frame, 
+               sheet = new_sheet,
+               col.names = TRUE,
+               row.names = FALSE,
+               colStyle = col_styles,
+               colnamesStyle = style_headings,
+               showNA = FALSE)
+  
+  # Set the column widths.
+  set_col_widths <- lapply(1:ncol(data_frame), function(x)
+    autoSizeColumn(new_sheet, x))
+  
+  # Freeze the top row
+  createFreezePane(new_sheet, rowSplit = 2, colSplit = 1)
+}
+
+# As a guide, include a sheet that lists all of the views included and write that
+# out as the first sheet
 views_included <- final_view_list %>% 
   select(webPropertyId, webPropertyName, view_id, viewName)
 
-# Load/create a workbook. This one is organized by view
-excel_file <- loadWorkbook ("output/custom_data_summary.xlsx", create = TRUE)
+write_to_workbook(views_included, "Views Included")
 
-# Put the list of views in a worksheet
-createSheet(excel_file, "List of Views")
-writeWorksheet(excel_file, views_included, "List of Views")
-
-# Make one flat list of all values sorted by custom variable / goal
+# Make one flat list of all values sorted by custom variable / goal and add that
+# to the workbook
 combined_by_custom_var <- combined_data %>% arrange(data_type, index)
-createSheet(excel_file,  "Master List of Values")
-writeWorksheet(excel_file, combined_by_custom_var, "Master List of Values")
 
-# And... finally using a loop. This may not be the most elegant way to do this, but it seems safest.
-# It just loops through the worksheets list and makes a new tab for each one
-for(i in 1:nrow(worksheets_list)){
+write_to_workbook(combined_by_custom_var, "Master List of Values")
 
-  export_data <- filter(combined_data, viewName == worksheets_list$viewName[[i]])
- createSheet(excel_file,  worksheets_list$sheet_name[[i]])
-  writeWorksheet(excel_file, export_data, worksheets_list$sheet_name[[i]])
+# A small function to create a subset data frame for each view and then write it
+# out to the Excel file
+write_view_detail <- function(view_name){
+  
+  export_data <- filter(combined_data, viewName == view_name)
+  sheet_name <- filter(worksheets_list, viewName == view_name) %>% 
+    select(sheet_name) %>%
+    as.character()
+
+  write_to_workbook(export_data, sheet_name)
 }
 
-saveWorkbook(excel_file)
+# Actually process all of the view names
+output_final <- lapply(worksheets_list$viewName, write_view_detail)
+
+# Save out the workbook
+saveWorkbook(output_wb, output_file)
 
 ```
 

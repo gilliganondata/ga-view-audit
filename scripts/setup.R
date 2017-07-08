@@ -8,11 +8,17 @@ options(googleAuthR.verbose = 2)
 # https://cran.r-project.org/web/packages/XLConnect/vignettes/XLConnect.pdf
 options(java.parameters = "-Xmx2048m" ) 
 
-library(tidyverse)
-library(stringr)
-library(googleAnalyticsR)
-library(knitr)
-library(XLConnect)
+# List out the packages that are required
+required_packages = c("tidyverse","stringr","googleAnalyticsR","knitr", "xlsx")
+
+# Check if each package is on the local machine. If a package is installed, it 
+# will simply be loaded. If not, then it will be installed AND loaded
+package_check <- lapply(required_packages, FUN = function(x) {
+  if (!require(x, character.only = TRUE)) {
+    install.packages(x, dependencies = TRUE)
+    library(x, character.only = TRUE)
+  }
+})
 
 # Authorize Google Analytics
 ga_auth()
