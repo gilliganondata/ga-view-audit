@@ -30,12 +30,12 @@ get_custom_variables <- function(account_id, property_id){
   
   # If no results returned, set custom_dims to NULL. Otherwise, extract
   # and filter the values into a data frame.
-  if(custom_dims$totalResults == 0){
+  if(nrow(custom_dims) == 0){
     custom_dims <- NULL
   } else {
     
     # These come back as a list -- get the data frame in the $items element
-    custom_dims <- custom_dims$items %>% 
+    custom_dims <- custom_dims %>% 
       select(-kind, -selfLink, -parentLink) %>% 
       filter(active == TRUE) %>%
       mutate(created = as.Date(created),
@@ -56,12 +56,12 @@ get_custom_variables <- function(account_id, property_id){
   
   # If no results returned, set custom_dims to NULL. Otherwise, extract
   # and filter the values into a data frame.
-  if(custom_metrics$totalResults == 0){
+  if(nrow(custom_metrics) == 0){
     custom_metrics <- NULL
   } else {
     
     # These come back as a list -- get the data frame in the $items element
-    custom_metrics <- custom_metrics$items %>% 
+    custom_metrics <- custom_metrics %>% 
       select(-kind, -selfLink, -parentLink) %>% 
       filter(active == TRUE) %>% 
       mutate(created = as.Date(created),
