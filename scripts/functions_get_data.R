@@ -8,7 +8,7 @@ get_custom_dim_hits <- function(view_id, dimension_id){
                           orderType = "VALUE")
   
   # Pull the data
-  custom_dim_data <- google_analytics_4(view_id,
+  custom_dim_data <- google_analytics(view_id,
                                         date_range = date_range,
                                         metrics = "hits",
                                         dimensions = dimension_id,
@@ -43,7 +43,7 @@ get_custom_metric_hits <- function(view_id, metric_id){
   Sys.sleep(1)
   
   # Pull the data
-  custom_metric_data <- google_analytics_4(view_id,
+  custom_metric_data <- google_analytics(view_id,
                                            date_range = date_range,
                                            metrics = metric_id)
   
@@ -71,7 +71,7 @@ get_goal_conversions <- function(view_id, goal_id){
   if(goal_id == "0"){
     goal_data <- data.frame(data_snapshot = NA)
   } else {
-    goal_data <- google_analytics_4(view_id,
+    goal_data <- google_analytics(view_id,
                                     date_range = date_range,
                                     metrics = paste0("goal",goal_id,"Completions"))
     

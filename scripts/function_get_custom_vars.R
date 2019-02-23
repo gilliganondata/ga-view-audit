@@ -34,9 +34,9 @@ get_custom_variables <- function(account_id, property_id){
     custom_dims <- NULL
   } else {
     
-    # These come back as a list -- get the data frame in the $items element
+    # Get just the active custom dims
     custom_dims <- custom_dims %>% 
-      select(-kind, -selfLink, -parentLink) %>% 
+      # select(-kind, -selfLink, -parentLink) %>%   # Legacy bit
       filter(active == TRUE) %>%
       mutate(created = as.Date(created),
              updated = as.Date(updated))
@@ -60,9 +60,9 @@ get_custom_variables <- function(account_id, property_id){
     custom_metrics <- NULL
   } else {
     
-    # These come back as a list -- get the data frame in the $items element
+    # Get just the active custom metrics
     custom_metrics <- custom_metrics %>% 
-      select(-kind, -selfLink, -parentLink) %>% 
+      # select(-kind, -selfLink, -parentLink) %>%  # Legacy bit
       filter(active == TRUE) %>% 
       mutate(created = as.Date(created),
              updated = as.Date(updated))
