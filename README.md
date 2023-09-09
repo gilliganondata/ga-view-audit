@@ -27,7 +27,7 @@ This does take a little bit of setup work.
 
 ### Set Up a Google Project
 
-This script uses [googleAnalyticsR](http://code.markedmondson.me/googleAnalyticsR/), and it hits the Google APIs pretty hard and fast, so you do _not_ want to use the default project. Luckily, it's pretty easy (and free) to set up a Google Project to work with googleAnalyticsR. Donal Phipps has put together a [nice video](http://donalphipps.co.uk/2017/06/25/setting-your-own-credentials-in-googleanalyticsr/) on how to do that.
+This script uses [googleAnalyticsR](http://code.markedmondson.me/googleAnalyticsR/), and it hits the Google APIs pretty hard and fast, so you do _not_ want to use the default project. Luckily, it's pretty easy (and free) to set up a Google Project to work with googleAnalyticsR. Donal Phipps has put together a [nice video](https://www.youtube.com/watch?v=4B88dRbwNfc) on how to do that.
 
 ### Put the Credentials in Your .Renviron File
 
